@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">智能打印</string>
+    <string-array name="page_type">
+        <item>A4</item>
+        <item>A5</item>
+        <item>B5</item>
+        <item>C5</item>
+        <item>C6</item>
+        <item>DL</item>
+    </string-array>
+    <string-array name="margin">
+        <item>普通</item>
+        <item>窄      </item>
+        <item>适中    </item>
+        <item>宽      </item>
+    </string-array>
+    <string-array name="number_up">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>8</item>
+        <item>16</item>
+    </string-array>
+</resources>
