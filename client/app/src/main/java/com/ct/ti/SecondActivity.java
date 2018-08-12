@@ -176,6 +176,7 @@ public class SecondActivity extends AppCompatActivity implements ActivityCompat.
             }
         }
     };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
