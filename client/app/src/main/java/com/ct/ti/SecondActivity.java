@@ -45,10 +45,9 @@ import java.util.Set;
 import java.util.UUID;
 
 
-public class SecondActivity extends AppCompatActivity implements ActivityCompat.OnRequestPermissionsResultCallback{
+public class SecondActivity extends AppCompatActivity{
 
     private String MAC="B8:27:EB:BE:AE:FC";
-    private static final int RequestPermission_bluetooth=1;
     private static final String TAG="SecondActivity";
     private String filePath;
     private Button button_OK;
@@ -112,7 +111,7 @@ public class SecondActivity extends AppCompatActivity implements ActivityCompat.
                 case 1:                                 //found
                     submit_bt.setEnabled(true);
                     break;
-                case 2:                             //not found
+                case 2:                                 //not found
                     Toast.makeText(SecondActivity.this,"连接蓝牙失败，请重试",Toast.LENGTH_LONG).show();
                     break;
                 case 3:
@@ -236,6 +235,12 @@ public class SecondActivity extends AppCompatActivity implements ActivityCompat.
             }
         });
 
+        button_OK.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new thread_searchDevice().start();
+            }
+        });
 
         submit_bt.setOnClickListener(new View.OnClickListener(){
             public void onClick(View v) {
@@ -329,65 +334,12 @@ public class SecondActivity extends AppCompatActivity implements ActivityCompat.
             }
         });
 
-        button_OK.setOnClickListener(new View.OnClickListener(){
-            public void onClick(View v){
-                if(Build.VERSION.SDK_INT >= 23){
-                    if (ContextCompat.checkSelfPermission(SecondActivity.this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-                        ActivityCompat.requestPermissions(SecondActivity.this, new String[]{Manifest.permission.BLUETOOTH}, RequestPermission_bluetooth);
-                    } else {
-                        new thread_searchDevice().start();
-                    }
-                }else{
-                    new thread_searchDevice().start();
-                }
-            }
-        });
-
         IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         registerReceiver(receiver, filter);
         filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         registerReceiver(receiver, filter);
     }
-//    private void initMySpinner() {
-//        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
-//                this, R.array.phones_array,
-//                android.R.layout.simple_spinner_item);
-//        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-//        spinner.setAdapter(adapter);
-//        spinner.setPrompt("test");
-//        spinner.setOnItemSelectedListener(new SpinnerOnSelectedListener());
-//    }
-//
-//    class SpinnerOnSelectedListener implements OnItemSelectedListener{
-//        public void onItemSelected(AdapterView<?> adapterView, View view, int position,
-//                                   long id) {
-//            // TODO Auto-generated method stub
-//            selected = adapterView.getItemAtPosition(position).toString();
-//            System.out.println("selected===========>" + selected);
-//        }
-//
-//        public void onNothingSelected(AdapterView<?> arg0) {
-//            // TODO Auto-generated method stub
-//            System.out.println("selected===========>" + "Nothing");
-//        }
-//    }
-//}
 
-    @Override
-    public void onRequestPermissionsResult(int RequestCode,String[] permissions,int[] grantResults){
-        Log.e(TAG,"called");
-        switch (RequestCode){
-            case RequestPermission_bluetooth:
-                if(grantResults.length>1 && grantResults[0]==PackageManager.PERMISSION_GRANTED){
-                    new thread_searchDevice().start();
-                }else{
-                    Toast.makeText(SecondActivity.this,"请同意使用蓝牙",Toast.LENGTH_LONG).show();
-                }
-                break;
-            default:
-                break;
-        }
-    }
     private void showAlertDialog(){
         final AlertDialog.Builder builder=new AlertDialog.Builder(SecondActivity.this);
         builder.setTitle("提示");
@@ -510,11 +462,20 @@ public class SecondActivity extends AppCompatActivity implements ActivityCompat.
                 for(BluetoothDevice device : pairedDevices){
                     Log.e(TAG,device.getAddress());
                     if (device.getAddress().equals(MAC)) {
-                        remoteDevice=device;
-                        Message message=new Message();
-                        message.what=1;
-                        uiHandler.sendMessage(message);
-                        return;
+                        remoteDevice = device;
+                        try{
+                            clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
+                            //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
+                            clientSocket.connect();
+                            Message message=new Message();
+                            message.what=1;
+                            uiHandler.sendMessage(message);
+                        }catch (IOException e){
+                            e.printStackTrace();
+                            Message message=new Message();
+                            message.what=2;
+                            uiHandler.sendMessage(message);
+                        }
                     }
                 }
             }

@@ -1,10 +1,15 @@
 package com.ct.ti;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
+import android.support.annotation.RequiresApi;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Button;
@@ -20,6 +25,7 @@ public class FirstActivity extends AppCompatActivity implements View.OnClickList
     private Button button_choseFile;
     private Button button_OK;
     private Uri uri;
+    private final int REQUESTCODE = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +38,7 @@ public class FirstActivity extends AppCompatActivity implements View.OnClickList
         button_choseFile=findViewById(R.id.button_choseFile);
         button_OK.setOnClickListener(this);
         button_choseFile.setOnClickListener(this);
+        requestPer();
     }
 
     @Override
@@ -77,5 +84,30 @@ public class FirstActivity extends AppCompatActivity implements View.OnClickList
     @Override
     public void onBackPressed(){
         this.finish();
+    }
+
+    private  void requestPer() {
+        if(android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            requestPermissions( new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.BLUETOOTH},REQUESTCODE );
+        else
+            return;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int RequestCode,String[] permissions,int[] grantResults){
+        switch (RequestCode){
+            case REQUESTCODE:
+                for(int i = 0;i<grantResults.length;i++){
+                    if(grantResults[i] == PackageManager.PERMISSION_GRANTED){
+                        continue;
+                    }else{
+                        requestPer();
+                        Toast.makeText(this,"请同意",Toast.LENGTH_SHORT);
+                    }
+                }
+                break;
+            default:
+                break;
+        }
     }
 }
