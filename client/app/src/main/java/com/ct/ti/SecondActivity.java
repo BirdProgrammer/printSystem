@@ -108,7 +108,7 @@ public class SecondActivity extends AppCompatActivity{
     public Handler uiHandler=new Handler(){
         public void handleMessage(Message msg){
             switch (msg.what){
-                case 1:                                 //found
+                case 1:                                 //found 并连接上
                     submit_bt.setEnabled(true);
                     break;
                 case 2:                                 //not found
@@ -126,7 +126,10 @@ public class SecondActivity extends AppCompatActivity{
                     break;
                 case 6:                                     //传输成功
                     progressDialog.dismiss();
-                    showAlertDialog();
+                    showSuccessAlertDialog();
+                    break;
+                case 7:                                     //无可用的打印机
+                    showFailureAlertDialog();
                     break;
                 default:
                     break;
@@ -189,8 +192,6 @@ public class SecondActivity extends AppCompatActivity{
             Uri uri=getIntent().getData();
             filePath=uri.getPath();
         }
-
-
 
         final CounterView copies = (CounterView) findViewById(R.id.Copies);
         copies.setCallback(callback);
@@ -334,19 +335,26 @@ public class SecondActivity extends AppCompatActivity{
             }
         });
 
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-        registerReceiver(receiver, filter);
-        filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-        registerReceiver(receiver, filter);
+
     }
 
-    private void showAlertDialog(){
+    private void showSuccessAlertDialog(){
         final AlertDialog.Builder builder=new AlertDialog.Builder(SecondActivity.this);
         builder.setTitle("提示");
-        builder.setMessage("传输完成");
-        builder.setPositiveButton("知道了！", new DialogInterface.OnClickListener(){
+        builder.setMessage("打印成功");
+        builder.setPositiveButton("确定", new DialogInterface.OnClickListener(){
             public void onClick(DialogInterface dialog,int whitch) {
                 end();
+            }
+        });
+        builder.create().show();
+    }
+    private void showFailureAlertDialog(){
+        final AlertDialog.Builder builder=new AlertDialog.Builder(SecondActivity.this);
+        builder.setTitle("提示");
+        builder.setMessage("无可用的打印机");
+        builder.setPositiveButton("确定", new DialogInterface.OnClickListener(){
+            public void onClick(DialogInterface dialog,int whitch) {
             }
         });
         builder.create().show();
@@ -368,17 +376,6 @@ public class SecondActivity extends AppCompatActivity{
     class thread_uploadFile extends Thread{
         public void run(){
             Message message;
-            try {
-                clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
-                //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
-                clientSocket.connect();
-            }catch (IOException e) {
-                message=new Message();
-                message.what=2;
-                uiHandler.sendMessage(message);
-                e.printStackTrace();
-                return;
-            }
             try{
                 //获得输出流（客户端指向服务端输出文本）
                 outputStream = clientSocket.getOutputStream();
@@ -386,44 +383,56 @@ public class SecondActivity extends AppCompatActivity{
                 inputStream = clientSocket.getInputStream();
                 inputStreamReader = new InputStreamReader(inputStream);
                 jsonWriter = new JsonWriter(outputStreamWriter);
-                Bundle bundle = new Bundle();
+
                 String name=filePath.split("/")[filePath.split("/").length-1];
-                do {
-                    jsonWriter.beginObject();
-                    jsonWriter.name("fileName").value(name);
-                    jsonWriter.name("mediaSize").value(MediaSize_para);
-                    jsonWriter.name("copies").value(copies_para);
-                    jsonWriter.name("margin").value(margin_para);
-                    jsonWriter.name("orientation").value(orientation_para);
-                    jsonWriter.name("chromaticity").value(chromaticity_para);
-                    jsonWriter.name("sides").value(sides_para);
-                    jsonWriter.name("pageRange").value(range_para);
-                    jsonWriter.name("firstPage").value(first_page_para);
-                    jsonWriter.name("lastPage").value(last_page_para);
-                    jsonWriter.name("quality").value(quality_para);
-                    jsonWriter.endObject();
-                    jsonWriter.flush();
-                    jsonReader = new JsonReader(inputStreamReader);
-                    jsonReader.beginObject();
-                    while (jsonReader.hasNext()) {
-                        bundle.putString(jsonReader.nextName(), jsonReader.nextString());
-                    }
-                    jsonReader.endObject();
-                }while (!bundle.getString("result").equals("success"));
+
+                jsonWriter.beginObject();
+                jsonWriter.name("fileName").value(name);
+                jsonWriter.name("mediaSize").value(MediaSize_para);
+                jsonWriter.name("copies").value(copies_para);
+                jsonWriter.name("margin").value(margin_para);
+                jsonWriter.name("orientation").value(orientation_para);
+                jsonWriter.name("chromaticity").value(chromaticity_para);
+                jsonWriter.name("sides").value(sides_para);
+                jsonWriter.name("pageRange").value(range_para);
+                jsonWriter.name("firstPage").value(first_page_para);
+                jsonWriter.name("lastPage").value(last_page_para);
+                jsonWriter.name("quality").value(quality_para);
+                jsonWriter.endObject();
+                jsonWriter.flush();
+
+                Bundle b = new Bundle();
+                jsonReader = new JsonReader(inputStreamReader);
+                jsonReader.beginObject();
+                while (jsonReader.hasNext()) {
+                    b.putString(jsonReader.nextName(),jsonReader.nextString());
+                }
+
+                jsonReader.endObject();
+                if(b.get("result").equals("failure")){
+                    message=new Message();
+                    message.what=7;
+                    uiHandler.sendMessage(message);
+                    return;
+                }
+
                 message=new Message();
                 message.what=4;
                 uiHandler.sendMessage(message);
                 try{
                     byte[] buffer=new byte[1024*100];
-                    int length=0;
+                    int length = 0;
                     File file=new File(filePath);
                     FileInputStream fileInputStream = new FileInputStream(file);
                     while((length=fileInputStream.read(buffer,0,buffer.length))!=-1) {
                         outputStream.write(buffer,0,length);
                         outputStream.flush();
                         message=new Message();
-                        message.what=5;
-                        message.arg1=length*100/fileInputStream.available();
+                        message.what = 5;
+//                        if(fileInputStream.available()!=0){
+//                            message.arg1 =  (length*100/fileInputStream.available());
+//                        }
+                        message.arg1 =  (length*100/(int)file.length());
                         uiHandler.sendMessage(message);
                     }
                     message=new Message();
@@ -454,6 +463,7 @@ public class SecondActivity extends AppCompatActivity{
     class thread_searchDevice extends Thread{
         @Override
         public void run(){
+            boolean flag = false;
             mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             if(!mBluetoothAdapter.isEnabled())
                 mBluetoothAdapter.enable();
@@ -467,6 +477,7 @@ public class SecondActivity extends AppCompatActivity{
                             clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
                             //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
                             clientSocket.connect();
+                            flag = true;
                             Message message=new Message();
                             message.what=1;
                             uiHandler.sendMessage(message);
@@ -479,11 +490,17 @@ public class SecondActivity extends AppCompatActivity{
                     }
                 }
             }
-            if (mBluetoothAdapter.isDiscovering()) {
-                mBluetoothAdapter.cancelDiscovery();
+            if(!flag){
+                if (mBluetoothAdapter.isDiscovering()) {
+                    mBluetoothAdapter.cancelDiscovery();
+                }
+                //开启搜索
+                mBluetoothAdapter.startDiscovery();
+                IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+                registerReceiver(receiver, filter);
+                filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+                registerReceiver(receiver, filter);
             }
-            //开启搜索
-            mBluetoothAdapter.startDiscovery();
         }
     }
 }

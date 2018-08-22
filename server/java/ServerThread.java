@@ -16,9 +16,11 @@ import javax.print.PrintService;
 import javax.print.PrintServiceLookup;
 import javax.print.SimpleDoc;
 import javax.print.attribute.DocAttributeSet;
+import javax.print.attribute.HashAttributeSet;
 import javax.print.attribute.HashDocAttributeSet;
 import javax.print.attribute.HashPrintRequestAttributeSet;
 import javax.print.attribute.standard.Chromaticity;
+import javax.print.attribute.standard.ColorSupported;
 import javax.print.attribute.standard.Copies;
 import javax.print.attribute.standard.MediaPrintableArea;
 import javax.print.attribute.standard.MediaSize;
@@ -36,7 +38,6 @@ public class ServerThread extends Thread {
 	private OutputStream outputStream;
 	private OutputStreamWriter outputStreamWriter;
 	private JSONObject jsonin;
-	private JSONObject jsonout;
 	private File myFile;
 	
 	private String mediaSize;
@@ -49,6 +50,7 @@ public class ServerThread extends Thread {
 	public ServerThread(StreamConnection sc) {
 		streamConnection=sc;
 	}
+
 	@Override
 	public void run() {
 		mediaSize="";
@@ -63,50 +65,37 @@ public class ServerThread extends Thread {
 			inputStream=streamConnection.openInputStream();
 			outputStream=streamConnection.openOutputStream();
 			inputStreamReader=new InputStreamReader(inputStream);
-			inputStreamReader.read(chars);
-			jsonout=new JSONObject();
-			jsonout.put("result", "success");
 			outputStreamWriter=new OutputStreamWriter(outputStream);
-			outputStreamWriter.write(jsonout.toString());
-			outputStreamWriter.flush();
+			inputStreamReader.read(chars);
+			jsonin=JSONObject.fromObject(String.valueOf(chars));
 		}catch(Exception e) {
 			e.printStackTrace();
 		}
-		try {
-			System.out.println(String.valueOf(chars));
-			jsonin=JSONObject.fromObject(String.valueOf(chars));
-			myFile = new File(jsonin.getString("fileName"));
-			FileOutputStream fileOutputStream=new FileOutputStream(myFile);
-			byte[] buffer=new byte[1024*100];
-			int tmp;
-			while((tmp=inputStream.read(buffer,0,buffer.length))>0) {
-				fileOutputStream.write(buffer,0,tmp);
-				fileOutputStream.flush();
-			}
-			fileOutputStream.close();
-			streamConnection.close();
-		}catch(IOException e) {
-			e.printStackTrace();
-		}
+
+		System.out.println(String.valueOf(chars));
+
 		mediaSize = jsonin.getString("mediaSize");
-		//copies = Integer.parseInt(jsonin.getString("copies"));
+		copies = Integer.parseInt(jsonin.getString("copies"));
+		
 		pageRange = jsonin.getString("pageRange");
 		orientation = jsonin.getString("orientation");
 		chromaticity = jsonin.getString("chromaticity");
-		//sides = jsonin.getString("sides");
-		//quality = jsonin.getString("quality");
+		sides = jsonin.getString("sides");
+		quality = jsonin.getString("quality");
 		//构建打印请求属性集   
 		HashPrintRequestAttributeSet pras = new HashPrintRequestAttributeSet();
+		DocAttributeSet das = new HashDocAttributeSet();
+		HashAttributeSet has = new HashAttributeSet();
 		switch(mediaSize) {
 			case "MediaSize.ISO.A4":pras.add(MediaSize.ISO.A4);break;
-			case "MediaSize.ISO.A5":pras.add(MediaSize.ISO.A5);break;
-			case "MediaSize.ISO.B5":pras.add(MediaSize.ISO.B5);break;
-			case "MediaSize.ISO.C5":pras.add(MediaSize.ISO.C5);break;
-			case "MediaSize.ISO.C6":pras.add(MediaSize.ISO.C6);break;
-			case "MediaSize.ISO.DESIGNATED_LONG":pras.add(MediaSize.ISO.DESIGNATED_LONG);break;
-			default:break;
+			// case "MediaSize.ISO.A5":pras.add(MediaSize.ISO.A5);break;
+			// case "MediaSize.ISO.B5":pras.add(MediaSize.ISO.B5);break;
+			// case "MediaSize.ISO.C5":pras.add(MediaSize.ISO.C5);break;
+			// case "MediaSize.ISO.C6":pras.add(MediaSize.ISO.C6);break;
+			// case "MediaSize.ISO.DESIGNATED_LONG":pras.add(MediaSize.ISO.DESIGNATED_LONG);break;
+			default:has.add(MediaSize.ISO.A4);break;
 		}
-		//pras.add(new Copies(copies));
+		pras.add(new Copies(copies));
 		switch(pageRange) {
 			case "整个文档": break;
 			case "自定义":pras.add(new PageRanges(jsonin.getInt("firstPage"),jsonin.getInt("lastPage")));break;
@@ -118,13 +107,13 @@ public class ServerThread extends Thread {
 			default:break;
 		}
 		switch(chromaticity) {
-			case "COLOR":pras.add(Chromaticity.COLOR);break;
-			case "MONOCHROME":pras.add(Chromaticity.MONOCHROME);break;
+			case "COLOR":das.add(Chromaticity.COLOR);pras.add(Chromaticity.COLOR);break;
+			case "MONOCHROME":das.add(Chromaticity.MONOCHROME);pras.add(Chromaticity.MONOCHROME);break;
 			default : break;
 		}
 		switch(sides){
 			case"DUPLEX":pras.add(Sides.DUPLEX);break;
-			case"ONE_SIDED":break;
+			case"ONE_SIDED":pras.add(Sides.ONE_SIDED);break;
 			default:break;
 		}
 		switch(quality) {
@@ -133,46 +122,53 @@ public class ServerThread extends Thread {
 			case "NORMAL":pras.add(PrintQuality.NORMAL);break;
 			default:break;
 		}
+		
 		//设置打印格式，因为未确定类型，所以选择autosense   
-		DocFlavor flavor = DocFlavor.INPUT_STREAM.PDF; 
+		DocFlavor flavor = DocFlavor.INPUT_STREAM.AUTOSENSE; 
 		//查找所有的可用的打印服务   
-		PrintService printService[] = PrintServiceLookup.lookupPrintServices(flavor, pras);   
-		//定位默认的打印服务   
-		PrintService defaultService = PrintServiceLookup.lookupDefaultPrintService();
-		//显示打印对话框   
-		//PrintService service = ServiceUI.printDialog(null, 200, 200, printService,    
-		//        defaultService, flavor, pras);
-		//System.out.println(String.valueOf(buffer));
-		if(printService.length>0){
-      		try {  
-      			System.out.println("start print");
-      			FileInputStream fileInputStream = new FileInputStream(myFile);	
-				DocPrintJob job = printService[0].createPrintJob(); //创建打印作业   
-				DocAttributeSet das = new HashDocAttributeSet();   
-				Doc doc = new SimpleDoc(fileInputStream, flavor, das); 
-				System.out.println("2 printing");  
-				job.print(doc, pras);
-				System.out.println("2 printed");
-			} catch (Exception e) {   
-				System.out.println("Error!");
-				e.printStackTrace();   
-			}
-		}else if (defaultService!=null){
+		PrintService printService[] = PrintServiceLookup.lookupPrintServices(flavor, has);
+		if(printService.length > 0){
 			try {  
-      			System.out.println("start print");
-      			FileInputStream fileInputStream = new FileInputStream(myFile);	
-				DocPrintJob job = defaultService.createPrintJob(); //创建打印作业   
-				DocAttributeSet das = new HashDocAttributeSet();   
+
+				JSONObject jsonout=new JSONObject();
+				jsonout.put("result", "success");
+				outputStreamWriter.write(jsonout.toString());
+				outputStreamWriter.flush();
+
+				myFile = new File(jsonin.getString("fileName"));
+				FileOutputStream fileOutputStream=new FileOutputStream(myFile);
+				byte[] buffer=new byte[1024*100];
+				int tmp;
+				while((tmp=inputStream.read(buffer,0,buffer.length)) != -1) {
+					fileOutputStream.write(buffer,0,tmp);
+					fileOutputStream.flush();
+				}
+				System.out.println("success");
+				fileOutputStream.close();
+				
+				System.out.println("start printing");
+				FileInputStream fileInputStream = new FileInputStream(myFile);	
+				//创建打印作业   
+				DocPrintJob job = printService[0].createPrintJob(); 
 				Doc doc = new SimpleDoc(fileInputStream, flavor, das); 
-				System.out.println("defaultService printing");  
-				job.print(doc, null);  
-				System.out.println("defaultService printed");
-			} catch (Exception e) {   
+				System.out.println("printing");  
+				job.print(doc, pras);
+				System.out.println("printed");
+		  	} catch (Exception e) {   
 				System.out.println("Error!");
 				e.printStackTrace();   
-			}
-		}else {
+		  	}
+		}else{
 			System.out.println("no printer");
+			try{
+				JSONObject jsonout=new JSONObject();
+				jsonout.put("result", "failure");
+				outputStreamWriter.write(jsonout.toString());
+				outputStreamWriter.flush();
+			}catch(IOException e){
+				e.printStackTrace();
+			}	
 		}
+		
 	}
 }
