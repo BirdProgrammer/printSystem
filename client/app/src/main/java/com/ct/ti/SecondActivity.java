@@ -1,8 +1,8 @@
 package com.ct.ti;
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
-import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -17,8 +17,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Bundle;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.util.JsonReader;
 import android.util.JsonWriter;
@@ -38,11 +37,23 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.util.ArrayList;
+import java.io.UnsupportedEncodingException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 
 public class SecondActivity extends AppCompatActivity{
@@ -61,10 +72,12 @@ public class SecondActivity extends AppCompatActivity{
     private RadioGroup sides_rg;
     private RadioGroup quality_rg;
     private RadioGroup chromaticity_rg;
+    private RadioGroup lock_rg;
     private Spinner MediaSize_sp;
     private Spinner margin_sp;
     private EditText first_page_et;
     private EditText last_page_et;
+    private ProgressDialog progressDialog_search;
 
     //文本框的内容
     private String sides_str;
@@ -74,6 +87,7 @@ public class SecondActivity extends AppCompatActivity{
     private String orientation_str;
     private String MediaSize_str;
     private String margin_str;
+    private String lock_str;
     private int first_page_int = 1;
     private int last_page_int = 1;
     private int copies_int = 1;
@@ -91,10 +105,12 @@ public class SecondActivity extends AppCompatActivity{
     private int first_page_para = 1;
     private int last_page_para = 1;
     private int copies_para = 1;
+    private boolean lock_para;
 
     private BluetoothAdapter mBluetoothAdapter;
     private final UUID MY_UUID = UUID
             .fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static final int PERMISSION_CODE = 666;
     private BluetoothSocket clientSocket;
     private OutputStream outputStream;//输出流
     private OutputStreamWriter outputStreamWriter;
@@ -109,9 +125,11 @@ public class SecondActivity extends AppCompatActivity{
         public void handleMessage(Message msg){
             switch (msg.what){
                 case 1:                                 //found 并连接上
+                    progressDialog_search.dismiss();
                     submit_bt.setEnabled(true);
                     break;
                 case 2:                                 //not found
+                    progressDialog_search.dismiss();
                     Toast.makeText(SecondActivity.this,"连接蓝牙失败，请重试",Toast.LENGTH_LONG).show();
                     break;
                 case 3:
@@ -122,7 +140,7 @@ public class SecondActivity extends AppCompatActivity{
                     progressDialog.show();
                     break;
                 case 5:                                     //正在传输
-                    progressDialog.incrementProgressBy(msg.arg1);
+                    progressDialog.setProgress(msg.arg1);
                     break;
                 case 6:                                     //传输成功
                     progressDialog.dismiss();
@@ -130,6 +148,9 @@ public class SecondActivity extends AppCompatActivity{
                     break;
                 case 7:                                     //无可用的打印机
                     showFailureAlertDialog();
+                    break;
+                case 9:
+                    progressDialog_search.show();
                     break;
                 default:
                     break;
@@ -142,42 +163,42 @@ public class SecondActivity extends AppCompatActivity{
             copies_int = count;
         }
     };
-    private final BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-                    Log.e(TAG,device.getAddress());
-                    if(device.getAddress().equals(MAC)) {
-                        Log.e(TAG, "true");
-                        remoteDevice = device;
-                        try{
-                            clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
-                            //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
-                            clientSocket.connect();
-                            Message message=new Message();
-                            message.what=1;
-                            uiHandler.sendMessage(message);
-                        }catch (IOException e){
-                            e.printStackTrace();
-                            Message message=new Message();
-                            message.what=2;
-                            uiHandler.sendMessage(message);
-                        }
-                    }
-                    else
-                        Log.e(TAG,"false");
-                }
-            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
-                //已搜素完成
-                Message message=new Message();
-                message.what=2;
-                uiHandler.sendMessage(message);
-            }
-        }
-    };
+//    private final BroadcastReceiver receiver = new BroadcastReceiver() {
+//        @Override
+//        public void onReceive(Context context, Intent intent) {
+//            String action = intent.getAction();
+//            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+//                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+//                if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
+//                    Log.e(TAG,device.getAddress());
+//                    if(device.getAddress().equals(MAC)) {
+//                        Log.e(TAG, "true");
+//                        remoteDevice = device;
+//                        try{
+//                            clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
+//                            //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
+//                            clientSocket.connect();
+//                            Message message=new Message();
+//                            message.what=1;
+//                            uiHandler.sendMessage(message);
+//                        }catch (IOException e){
+//                            e.printStackTrace();
+//                            Message message=new Message();
+//                            message.what=2;
+//                            uiHandler.sendMessage(message);
+//                        }
+//                    }
+//                    else
+//                        Log.e(TAG,"false");
+//                }
+//            } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+//                //已搜素完成
+//                Message message=new Message();
+//                message.what=2;
+//                uiHandler.sendMessage(message);
+//            }
+//        }
+//    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -203,11 +224,13 @@ public class SecondActivity extends AppCompatActivity{
         progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
         progressDialog.setMax(100);
         progressDialog.setIndeterminate(false);
+
         button_OK=findViewById(R.id.button_SecondOK);
         submit_bt = findViewById(R.id.submit);
         sides_rg = findViewById(R.id.sides);
         orientation_rg= findViewById(R.id.orientation);    //方向为竖或者横
         quality_rg = findViewById(R.id.quality);
+        lock_rg = findViewById(R.id.lock);
         chromaticity_rg = findViewById(R.id.Chromaticity);
         range_rg = findViewById(R.id.PageRanges);
         all_rb = findViewById(R.id.all);
@@ -218,7 +241,16 @@ public class SecondActivity extends AppCompatActivity{
         last_page_et = findViewById(R.id.last_page);
         first_page_et.setEnabled(false);
         last_page_et.setEnabled(false);
-//      tv= (TextView) findViewById(R.id.tv);
+
+        progressDialog_search=new ProgressDialog(SecondActivity.this);
+        progressDialog_search.setTitle("提示");
+        progressDialog_search.setMessage("搜索蓝牙中");
+        progressDialog_search.setCancelable(false);
+        progressDialog_search.setCanceledOnTouchOutside(false);
+        progressDialog_search.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+        progressDialog_search.setIndeterminate(false);
+
+
         all_rb.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -239,7 +271,20 @@ public class SecondActivity extends AppCompatActivity{
         button_OK.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                new thread_searchDevice().start();
+                if(android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
+                    if((checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                            || (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                            || (checkSelfPermission(Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED)
+                            || (checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED)){
+                        requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.BLUETOOTH,Manifest.permission.BLUETOOTH_ADMIN},PERMISSION_CODE);
+                    }else{
+                        new thread_searchDevice().start();
+                    }
+                }
+                else{
+                    new thread_searchDevice().start();
+                }
             }
         });
 
@@ -252,6 +297,8 @@ public class SecondActivity extends AppCompatActivity{
                 quality_str = ((RadioButton) findViewById(quality_rg.getCheckedRadioButtonId())).getText().toString();
                 MediaSize_str = MediaSize_sp.getSelectedItem().toString();
                 margin_str = margin_sp.getSelectedItem().toString();
+                lock_str = ((RadioButton)findViewById(lock_rg.getCheckedRadioButtonId())).getText().toString();
+
                 String temp = null;
                 if (range_str.equals("自定义")) {
                     if (first_page_et.getText().length() == 0 || last_page_et.getText().length() == 0) {
@@ -263,25 +310,35 @@ public class SecondActivity extends AppCompatActivity{
                         if (first_page_int > last_page_int) {
                             Toast.makeText(SecondActivity.this, "页码范围无效，请重新输入", Toast.LENGTH_LONG).show();
                         } else {
-                            temp = "你选择了" + sides_str + "打印" + "\n" + "打印效果：" + chromaticity_str + "\n"
-                                    + "打印方向：" + orientation_str + "\n" + "打印范围为"
-                                    + first_page_int + "-" + last_page_int + "\n" +
-                                    "打印质量：" + quality_str + "\n" + "纸张大小：" + MediaSize_str + "\n"
-                                    + "打印边距：" + margin_str + "\n" + "共打印" + copies_int + "份";
+                            temp = "您选择了"
+                                    + sides_str + "打印" + "\n"
+                                    + "打印效果：" + chromaticity_str + "\n"
+                                    + "打印方向：" + orientation_str + "\n"
+                                    + "打印范围:"
+                                    + first_page_int + "-" + last_page_int + "\n"
+                                    + "打印质量：" + quality_str + "\n"
+                                    + "纸张大小：" + MediaSize_str + "\n"
+                                    + "打印边距：" + margin_str + "\n"
+                                    + "是否加密：" + lock_str + "\n"
+                                    + "共打印" + copies_int + "份";
                             show(temp);
                         }
                     }
 
                 } else {
-                    temp = "你选择了" + sides_str + "打印" + "\n" + "打印效果：" + chromaticity_str + "\n"
-                             + "打印方向：" + orientation_str + "\n" + "打印范围为"
-                            + range_str + "\n" +
-                            "打印质量：" + quality_str + "\n" + "纸张大小：" + MediaSize_str + "\n"
-                            + "打印边距：" + margin_str + "\n" + "共打印" + copies_int + "份";
+                    temp = "您选择了"
+                            + sides_str + "打印" + "\n"
+                            + "打印效果：" + chromaticity_str + "\n"
+                            + "打印方向：" + orientation_str + "\n"
+                            + "打印范围：" + range_str + "\n"
+                            + "打印质量：" + quality_str + "\n"
+                            + "纸张大小：" + MediaSize_str + "\n"
+                            + "打印边距：" + margin_str + "\n"
+                            + "是否加密：" + lock_str + "\n"
+                            + "共打印" + copies_int + "份";
                     show(temp);
                 }
                 initParam();
-
             }
             private void initParam() {
                 switch (chromaticity_str) {
@@ -304,6 +361,10 @@ public class SecondActivity extends AppCompatActivity{
                 switch (sides_str) {
                     case "单面" : sides_para = "ONE_SIDED";break;
                     case "双面" : sides_para = "DUPLEX";break;
+                }
+                switch (lock_str){
+                    case "是" : lock_para = true;break;
+                    case "否" : lock_para = false;break;
                 }
                 copies_para = copies_int;
                 margin_para = margin_str;
@@ -338,6 +399,27 @@ public class SecondActivity extends AppCompatActivity{
 
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        switch (requestCode){
+            case PERMISSION_CODE:
+                boolean flag = true;
+                for(int i = 0;i<grantResults.length;i++){
+                    if(grantResults[i] == PackageManager.PERMISSION_GRANTED){
+                        continue;
+                    }else{
+                        flag = false;
+                        Toast.makeText(this,"请同意",Toast.LENGTH_SHORT);
+                    }
+                }
+                if(flag){
+                    new thread_searchDevice().start();
+                }
+                break;
+            default:break;
+        }
+    }
+
     private void showSuccessAlertDialog(){
         final AlertDialog.Builder builder=new AlertDialog.Builder(SecondActivity.this);
         builder.setTitle("提示");
@@ -364,7 +446,6 @@ public class SecondActivity extends AppCompatActivity{
             mBluetoothAdapter.disable();
         Intent intent = new Intent(SecondActivity.this,FirstActivity.class);
         startActivity(intent);
-        unregisterReceiver(receiver);
         finish();
     }
     @Override
@@ -374,6 +455,35 @@ public class SecondActivity extends AppCompatActivity{
 
 
     class thread_uploadFile extends Thread{
+
+        private final String cKey = "00b09e37363e596e1f25b23c78e49939238b";
+
+        private   Cipher initAESCipher(String sKey, int cipherMode) {
+            KeyGenerator keyGenerator = null;
+            Cipher cipher = null;
+            try {
+                keyGenerator = KeyGenerator.getInstance("AES");
+                keyGenerator.init(128, new SecureRandom(sKey.getBytes()));
+                SecretKey secretKey;
+                secretKey = keyGenerator.generateKey();
+                byte[] codeFormat = secretKey.getEncoded();
+                SecretKeySpec key = new SecretKeySpec(codeFormat, "AES");
+                cipher = Cipher.getInstance("AES");
+
+                cipher.init(cipherMode, key);
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace(); // To change body of catch statement use File |
+                // Settings | File Templates.
+            } catch (NoSuchPaddingException e) {
+                e.printStackTrace(); // To change body of catch statement use File |
+                // Settings | File Templates.
+            } catch (InvalidKeyException e) {
+                e.printStackTrace(); // To change body of catch statement use File |
+                // Settings | File Templates.
+            }
+            return cipher;
+        }
+
         public void run(){
             Message message;
             try{
@@ -398,6 +508,7 @@ public class SecondActivity extends AppCompatActivity{
                 jsonWriter.name("firstPage").value(first_page_para);
                 jsonWriter.name("lastPage").value(last_page_para);
                 jsonWriter.name("quality").value(quality_para);
+                jsonWriter.name("lock").value(lock_para);
                 jsonWriter.endObject();
                 jsonWriter.flush();
 
@@ -419,21 +530,37 @@ public class SecondActivity extends AppCompatActivity{
                 message=new Message();
                 message.what=4;
                 uiHandler.sendMessage(message);
+
                 try{
-                    byte[] buffer=new byte[1024*100];
+                    byte[] buffer=new byte[1024];
                     int length = 0;
                     File file=new File(filePath);
                     FileInputStream fileInputStream = new FileInputStream(file);
-                    while((length=fileInputStream.read(buffer,0,buffer.length))!=-1) {
-                        outputStream.write(buffer,0,length);
-                        outputStream.flush();
-                        message=new Message();
-                        message.what = 5;
-//                        if(fileInputStream.available()!=0){
-//                            message.arg1 =  (length*100/fileInputStream.available());
-//                        }
-                        message.arg1 =  (length*100/(int)file.length());
-                        uiHandler.sendMessage(message);
+                    int sum = 0;
+                    if(lock_para){
+                        Cipher cipher = initAESCipher(cKey, Cipher.ENCRYPT_MODE);
+                        CipherInputStream cipherInputStream = new CipherInputStream(fileInputStream, cipher);
+                        while((length=cipherInputStream.read(buffer))!=-1) {
+                            outputStream.write(buffer,0,length);
+                            outputStream.flush();
+                            sum += length;
+                            message=new Message();
+                            message.what = 5;
+                            message.arg1 =  (sum*100/(int)file.length());
+                            uiHandler.sendMessage(message);
+                        }
+                        cipherInputStream.close();
+                    }else{
+                        while((length=fileInputStream.read(buffer))!=-1) {
+                            outputStream.write(buffer,0,length);
+                            outputStream.flush();
+                            sum += length;
+                            message=new Message();
+                            message.what = 5;
+                            message.arg1 =  (sum*100/(int)file.length());
+                            uiHandler.sendMessage(message);
+                        }
+                        fileInputStream.close();
                     }
                     message=new Message();
                     message.what=6;
@@ -449,12 +576,13 @@ public class SecondActivity extends AppCompatActivity{
                 message.what=3;
                 uiHandler.sendMessage(message);
                 e.printStackTrace();
-            }
-            if(clientSocket.isConnected()){
-                try{
-                    clientSocket.close();
-                }catch (IOException e){
-                    e.printStackTrace();
+            }finally {
+                if(clientSocket.isConnected()){
+                    try{
+                        clientSocket.close();
+                    }catch (IOException e){
+                        e.printStackTrace();
+                    }
                 }
             }
         }
@@ -463,10 +591,18 @@ public class SecondActivity extends AppCompatActivity{
     class thread_searchDevice extends Thread{
         @Override
         public void run(){
+            if(progressDialog_search.isShowing()){
+                return;
+            }
+
             boolean flag = false;
             mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             if(!mBluetoothAdapter.isEnabled())
                 mBluetoothAdapter.enable();
+            Message m = new Message();
+            m.what=9;
+            uiHandler.sendMessage(m);
+
             Set<BluetoothDevice> pairedDevices=mBluetoothAdapter.getBondedDevices();
             if(pairedDevices.size()>0){
                 for(BluetoothDevice device : pairedDevices){
@@ -474,10 +610,10 @@ public class SecondActivity extends AppCompatActivity{
                     if (device.getAddress().equals(MAC)) {
                         remoteDevice = device;
                         try{
+                            flag = true;
                             clientSocket = remoteDevice.createRfcommSocketToServiceRecord(MY_UUID);
                             //开始连接蓝牙，如果没有配对则弹出对话框提示我们进行配对
                             clientSocket.connect();
-                            flag = true;
                             Message message=new Message();
                             message.what=1;
                             uiHandler.sendMessage(message);
@@ -491,15 +627,15 @@ public class SecondActivity extends AppCompatActivity{
                 }
             }
             if(!flag){
+                Message message=new Message();
+                message.what=2;
+                uiHandler.sendMessage(message);
+
                 if (mBluetoothAdapter.isDiscovering()) {
                     mBluetoothAdapter.cancelDiscovery();
                 }
                 //开启搜索
                 mBluetoothAdapter.startDiscovery();
-                IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-                registerReceiver(receiver, filter);
-                filter = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
-                registerReceiver(receiver, filter);
             }
         }
     }

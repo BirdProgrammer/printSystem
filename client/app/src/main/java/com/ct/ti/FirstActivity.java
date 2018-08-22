@@ -88,7 +88,7 @@ public class FirstActivity extends AppCompatActivity implements View.OnClickList
 
     private  void requestPer() {
         if(android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-            requestPermissions( new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.BLUETOOTH},REQUESTCODE );
+            requestPermissions( new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},REQUESTCODE );
         else
             return;
     }
