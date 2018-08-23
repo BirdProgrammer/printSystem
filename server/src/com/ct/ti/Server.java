@@ -1,4 +1,4 @@
-
+package com.ct.ti;
 
 import javax.bluetooth.DiscoveryAgent;
 import javax.bluetooth.LocalDevice;
@@ -24,7 +24,7 @@ public class Server {
 			localDevice=LocalDevice.getLocalDevice();
 			if(!localDevice.setDiscoverable(DiscoveryAgent.GIAC)) {
 				return;
-			};
+			}
 			System.out.println(uuid.toString());
 			streamConnectionNotifier=(StreamConnectionNotifier) Connector.open(getConnectionStr());
 			serviceRecord=localDevice.getRecord(streamConnectionNotifier);
@@ -46,12 +46,10 @@ public class Server {
 		StreamConnection streamConnection=null;
 		while(true) {
 			try {
-				System.out.println("waiting for connection...");
 				streamConnection=streamConnectionNotifier.acceptAndOpen();
 				RemoteDevice dev = RemoteDevice.getRemoteDevice(streamConnection);
 				System.out.println("Remote device address: "
 						+ dev.getBluetoothAddress());
-				System.out.println("Remote device name: " + dev.getFriendlyName(true));
 				new ServerThread(streamConnection).start();
 			}catch(Exception e) {
 				e.printStackTrace();

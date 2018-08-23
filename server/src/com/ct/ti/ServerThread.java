@@ -1,3 +1,5 @@
+package com.ct.ti;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -6,15 +8,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import javax.crypto.Cipher;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.KeyGenerator;
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
+
 import javax.print.Doc;
 import javax.print.DocFlavor;
 import javax.print.DocPrintJob;
@@ -33,13 +27,10 @@ import javax.print.attribute.standard.PageRanges;
 import javax.print.attribute.standard.PrintQuality;
 import javax.print.attribute.standard.Sides;
 import javax.microedition.io.StreamConnection;
+
 import net.sf.json.JSONObject;
 
-
-
 public class ServerThread extends Thread {
-
-	private final String cKey = "00b09e37363e596e1f25b23c78e49939238b";
 
     private StreamConnection streamConnection;
     private InputStream inputStream;
@@ -47,7 +38,10 @@ public class ServerThread extends Thread {
     private OutputStream outputStream;
     private OutputStreamWriter outputStreamWriter;
     private JSONObject jsonin;
-    private File myFile;
+
+    private File file;
+    private File decodedFile;
+    private FileInputStream fileInputStream;
 
     private String mediaSize;
     private int copies;
@@ -106,10 +100,13 @@ public class ServerThread extends Thread {
             // case "MediaSize.ISO.DESIGNATED_LONG":pras.add(MediaSize.ISO.DESIGNATED_LONG);break;
             default:has.add(MediaSize.ISO.A4);break;
         }
+
         pras.add(new Copies(copies));
         switch(pageRange) {
-            case "整个文档": break;
-            case "自定义":pras.add(new PageRanges(jsonin.getInt("firstPage"),jsonin.getInt("lastPage")));break;
+            case "ALL": break;
+            case "SPECIFIC":has.add(new PageRanges(jsonin.getInt("firstPage"),jsonin.getInt("lastPage")));
+                            pras.add(new PageRanges(jsonin.getInt("firstPage"),jsonin.getInt("lastPage")));
+                            break;
         }
 
         switch(orientation) {
@@ -118,12 +115,13 @@ public class ServerThread extends Thread {
             default:break;
         }
         switch(chromaticity) {
-            case "COLOR":das.add(Chromaticity.COLOR);pras.add(Chromaticity.COLOR);break;
-            case "MONOCHROME":das.add(Chromaticity.MONOCHROME);pras.add(Chromaticity.MONOCHROME);break;
+            case "COLOR":pras.add(Chromaticity.COLOR);break;
+            case "MONOCHROME":has.add(Chromaticity.MONOCHROME);pras.add(Chromaticity.MONOCHROME);break;
             default : break;
         }
+
         switch(sides){
-            case"DUPLEX":pras.add(Sides.DUPLEX);break;
+            case"DUPLEX":has.add(Sides.DUPLEX);pras.add(Sides.DUPLEX);break;
             case"ONE_SIDED":pras.add(Sides.ONE_SIDED);break;
             default:break;
         }
@@ -135,14 +133,8 @@ public class ServerThread extends Thread {
         }
 
 		//设置打印格式，因为未确定类型，所以选择autosense
-        DocFlavor flavor;
-		if((jsonin.getString("fileName").split("\\.")[1]).equals("txt")){
-			System.out.println("txt");
-			flavor = DocFlavor.INPUT_STREAM.TEXT_PLAIN_HOST;
-		}else{
-			flavor = DocFlavor.INPUT_STREAM.AUTOSENSE;
-		}
-        //查找所有的可用的打印服务
+        DocFlavor flavor = DocFlavor.INPUT_STREAM.AUTOSENSE;
+
         PrintService printService[] = PrintServiceLookup.lookupPrintServices(flavor, has);
         if(printService.length > 0){
             try {
@@ -152,27 +144,26 @@ public class ServerThread extends Thread {
                 outputStreamWriter.write(jsonout.toString());
                 outputStreamWriter.flush();
 
-                myFile = new File(jsonin.getString("fileName"));
-                FileOutputStream fileOutputStream=new FileOutputStream(myFile);
+                file = new File(jsonin.getString("fileName"));
+                FileOutputStream fileOutputStream=new FileOutputStream(file);
                 byte[] buffer=new byte[1024];
                 int tmp;
-                if(lock){
-					Cipher cipher = initAESCipher(cKey, Cipher.DECRYPT_MODE);
-					CipherOutputStream cipherOutputStream = new CipherOutputStream(fileOutputStream, cipher);
-                    while((tmp=inputStream.read(buffer)) != -1) {
-                        cipherOutputStream.write(buffer,0,tmp);
-					}
-					cipherOutputStream.close();
-                }else{
-                    while((tmp=inputStream.read(buffer)) != -1) {
-                        fileOutputStream.write(buffer,0,tmp);
-                        fileOutputStream.flush();
-					}
-					fileOutputStream.close();
+                while((tmp=inputStream.read(buffer)) != -1) {
+                    fileOutputStream.write(buffer,0,tmp);
+                    fileOutputStream.flush(); 
                 }
-				
+                
+                fileOutputStream.close();
+
+                if(lock){
+                    decodedFile = new File("decoded_"+file.getName());
+                    decode.decryptFile(file,decodedFile);
+                    fileInputStream = new FileInputStream(file);
+                }else{
+                    fileInputStream = new FileInputStream(file);
+                }
+
                 System.out.println("start printing");
-                FileInputStream fileInputStream = new FileInputStream(myFile);
                 //创建打印作业
                 DocPrintJob job = printService[0].createPrintJob();
                 Doc doc = new SimpleDoc(fileInputStream, flavor, das);
@@ -203,34 +194,16 @@ public class ServerThread extends Thread {
 		}
 		try{
 			streamConnection.close();
+			Thread.sleep(5000);
+			file.delete();
+			if(decodedFile != null){
+			    decodedFile.delete();
+            }
 			System.out.println("closed");
-		}catch(IOException e){
+		}catch(Exception e){
 			e.printStackTrace();
 		}
 
     }
 
-    public static Cipher initAESCipher(String sKey, int cipherMode) {
-        KeyGenerator keyGenerator = null;
-        Cipher cipher = null;
-        try {
-            keyGenerator = KeyGenerator.getInstance("AES");
-            keyGenerator.init(128, new SecureRandom(sKey.getBytes()));
-            SecretKey secretKey = keyGenerator.generateKey();
-            byte[] codeFormat = secretKey.getEncoded();
-            SecretKeySpec key = new SecretKeySpec(codeFormat, "AES");
-            cipher = Cipher.getInstance("AES");
-            cipher.init(cipherMode, key);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace(); // To change body of catch statement use File |
-            // Settings | File Templates.
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace(); // To change body of catch statement use File |
-            // Settings | File Templates.
-        } catch (InvalidKeyException e) {
-            e.printStackTrace(); // To change body of catch statement use File |
-            // Settings | File Templates.
-        }
-        return cipher;
-    }
 }

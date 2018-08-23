@@ -98,7 +98,6 @@
                 android:layout_height="wrap_content"
                 android:button="@drawable/portrait_select"
                 android:layout_weight="3"
-                android:checked="true"
                 android:text="黑白" />
 
             <RadioButton
@@ -107,6 +106,7 @@
                 android:button="@drawable/color_select"
                 android:layout_height="wrap_content"
                 android:layout_weight="3"
+                android:checked="true"
                 android:text="彩印" />
         </RadioGroup>
 
@@ -162,7 +162,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="3"
-                android:text="文档"
+                android:text="ALL"
                 android:button="@drawable/all_select"
                 android:checked="true" />
 
@@ -172,7 +172,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="3"
                 android:button="@drawable/optional_select"
-                android:text="自定义" />
+                android:text="SPECIFIC" />
         </RadioGroup>
         <android.support.constraint.ConstraintLayout
             android:layout_width="match_parent"

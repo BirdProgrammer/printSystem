@@ -37,7 +37,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -46,10 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.CipherInputStream;
-import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
@@ -118,7 +114,8 @@ public class SecondActivity extends AppCompatActivity{
     private InputStreamReader inputStreamReader;
     private JsonWriter jsonWriter;
     private JsonReader jsonReader;
-    private ProgressDialog progressDialog;
+    private ProgressDialog progressDialogTransfering;
+    private ProgressDialog progressDialogEncoding;
     private BluetoothDevice remoteDevice;
     @SuppressLint("HandlerLeak")
     public Handler uiHandler=new Handler(){
@@ -134,16 +131,16 @@ public class SecondActivity extends AppCompatActivity{
                     break;
                 case 3:
                     Toast.makeText(SecondActivity.this,"传输失败",Toast.LENGTH_LONG).show();//传输失败
-                    progressDialog.dismiss();
+                    progressDialogTransfering.dismiss();
                     break;
                 case 4:                                     //开始传输
-                    progressDialog.show();
+                    progressDialogTransfering.show();
                     break;
                 case 5:                                     //正在传输
-                    progressDialog.setProgress(msg.arg1);
+                    progressDialogTransfering.setProgress(msg.arg1);
                     break;
                 case 6:                                     //传输成功
-                    progressDialog.dismiss();
+                    progressDialogTransfering.dismiss();
                     showSuccessAlertDialog();
                     break;
                 case 7:                                     //无可用的打印机
@@ -151,6 +148,15 @@ public class SecondActivity extends AppCompatActivity{
                     break;
                 case 9:
                     progressDialog_search.show();
+                    break;
+                case 10:                                     //开始加密
+                    progressDialogEncoding.show();
+                    break;
+                case 11:                                     //正在加密
+                    progressDialogEncoding.setProgress(msg.arg1);
+                    break;
+                case 12:                                     //加密成功
+                    progressDialogEncoding.dismiss();
                     break;
                 default:
                     break;
@@ -217,13 +223,21 @@ public class SecondActivity extends AppCompatActivity{
         final CounterView copies = (CounterView) findViewById(R.id.Copies);
         copies.setCallback(callback);
 
-        progressDialog=new ProgressDialog(SecondActivity.this);
-        progressDialog.setTitle("上传文件");
-        progressDialog.setMessage("上传文件进度");
-        progressDialog.setCancelable(false);
-        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-        progressDialog.setMax(100);
-        progressDialog.setIndeterminate(false);
+        progressDialogTransfering=new ProgressDialog(SecondActivity.this);
+        progressDialogTransfering.setTitle("上传文件");
+        progressDialogTransfering.setMessage("上传文件进度");
+        progressDialogTransfering.setCancelable(false);
+        progressDialogTransfering.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progressDialogTransfering.setMax(100);
+        progressDialogTransfering.setIndeterminate(false);
+
+        progressDialogEncoding=new ProgressDialog(SecondActivity.this);
+        progressDialogEncoding.setTitle("文件加密");
+        progressDialogEncoding.setMessage("文件加密进度");
+        progressDialogEncoding.setCancelable(false);
+        progressDialogEncoding.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progressDialogEncoding.setMax(100);
+        progressDialogEncoding.setIndeterminate(false);
 
         button_OK=findViewById(R.id.button_SecondOK);
         submit_bt = findViewById(R.id.submit);
@@ -300,7 +314,7 @@ public class SecondActivity extends AppCompatActivity{
                 lock_str = ((RadioButton)findViewById(lock_rg.getCheckedRadioButtonId())).getText().toString();
 
                 String temp = null;
-                if (range_str.equals("自定义")) {
+                if (range_str.equals("SPECIFIC")) {
                     if (first_page_et.getText().length() == 0 || last_page_et.getText().length() == 0) {
                         Toast.makeText(SecondActivity.this, "请输入页码范围", Toast.LENGTH_LONG).show();
                     }
@@ -456,34 +470,6 @@ public class SecondActivity extends AppCompatActivity{
 
     class thread_uploadFile extends Thread{
 
-        private final String cKey = "00b09e37363e596e1f25b23c78e49939238b";
-
-        private   Cipher initAESCipher(String sKey, int cipherMode) {
-            KeyGenerator keyGenerator = null;
-            Cipher cipher = null;
-            try {
-                keyGenerator = KeyGenerator.getInstance("AES");
-                keyGenerator.init(128, new SecureRandom(sKey.getBytes()));
-                SecretKey secretKey;
-                secretKey = keyGenerator.generateKey();
-                byte[] codeFormat = secretKey.getEncoded();
-                SecretKeySpec key = new SecretKeySpec(codeFormat, "AES");
-                cipher = Cipher.getInstance("AES");
-
-                cipher.init(cipherMode, key);
-            } catch (NoSuchAlgorithmException e) {
-                e.printStackTrace(); // To change body of catch statement use File |
-                // Settings | File Templates.
-            } catch (NoSuchPaddingException e) {
-                e.printStackTrace(); // To change body of catch statement use File |
-                // Settings | File Templates.
-            } catch (InvalidKeyException e) {
-                e.printStackTrace(); // To change body of catch statement use File |
-                // Settings | File Templates.
-            }
-            return cipher;
-        }
-
         public void run(){
             Message message;
             try{
@@ -534,30 +520,31 @@ public class SecondActivity extends AppCompatActivity{
                 try{
                     byte[] buffer=new byte[1024];
                     int length = 0;
-                    File file=new File(filePath);
-                    FileInputStream fileInputStream = new FileInputStream(file);
+                    File sourceFile=new File(filePath);
                     int sum = 0;
                     if(lock_para){
-                        Cipher cipher = initAESCipher(cKey, Cipher.ENCRYPT_MODE);
-                        CipherInputStream cipherInputStream = new CipherInputStream(fileInputStream, cipher);
-                        while((length=cipherInputStream.read(buffer))!=-1) {
+                        File encodedFile = File.createTempFile("encoded",null,getCacheDir());
+                        encode.encryptFile(sourceFile,encodedFile,uiHandler);
+                        FileInputStream fileInputStream = new FileInputStream(sourceFile);
+                        while((length=fileInputStream.read(buffer))!=-1) {
                             outputStream.write(buffer,0,length);
-                            outputStream.flush();
                             sum += length;
                             message=new Message();
                             message.what = 5;
-                            message.arg1 =  (sum*100/(int)file.length());
+                            message.arg1 =  (sum*100/(int)encodedFile.length());
                             uiHandler.sendMessage(message);
                         }
-                        cipherInputStream.close();
+                        fileInputStream.close();
+                        encodedFile.delete();
                     }else{
+                        FileInputStream fileInputStream = new FileInputStream(sourceFile);
                         while((length=fileInputStream.read(buffer))!=-1) {
                             outputStream.write(buffer,0,length);
                             outputStream.flush();
                             sum += length;
                             message=new Message();
                             message.what = 5;
-                            message.arg1 =  (sum*100/(int)file.length());
+                            message.arg1 =  (sum*100/(int)sourceFile.length());
                             uiHandler.sendMessage(message);
                         }
                         fileInputStream.close();
