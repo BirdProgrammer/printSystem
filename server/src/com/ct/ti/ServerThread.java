@@ -19,13 +19,7 @@ import javax.print.attribute.DocAttributeSet;
 import javax.print.attribute.HashAttributeSet;
 import javax.print.attribute.HashDocAttributeSet;
 import javax.print.attribute.HashPrintRequestAttributeSet;
-import javax.print.attribute.standard.Chromaticity;
-import javax.print.attribute.standard.Copies;
-import javax.print.attribute.standard.MediaSize;
-import javax.print.attribute.standard.OrientationRequested;
-import javax.print.attribute.standard.PageRanges;
-import javax.print.attribute.standard.PrintQuality;
-import javax.print.attribute.standard.Sides;
+import javax.print.attribute.standard.*;
 import javax.microedition.io.StreamConnection;
 
 import net.sf.json.JSONObject;
@@ -92,13 +86,13 @@ public class ServerThread extends Thread {
         DocAttributeSet das = new HashDocAttributeSet();
         HashAttributeSet has = new HashAttributeSet();
         switch(mediaSize) {
-            case "MediaSize.ISO.A4":pras.add(MediaSize.ISO.A4);break;
+            //case "MediaSize.ISO.A4":pras.add(MediaSize.ISO.A4);break;
             // case "MediaSize.ISO.A5":pras.add(MediaSize.ISO.A5);break;
             // case "MediaSize.ISO.B5":pras.add(MediaSize.ISO.B5);break;
             // case "MediaSize.ISO.C5":pras.add(MediaSize.ISO.C5);break;
             // case "MediaSize.ISO.C6":pras.add(MediaSize.ISO.C6);break;
             // case "MediaSize.ISO.DESIGNATED_LONG":pras.add(MediaSize.ISO.DESIGNATED_LONG);break;
-            default:has.add(MediaSize.ISO.A4);break;
+            default:break;
         }
 
         pras.add(new Copies(copies));
@@ -132,6 +126,7 @@ public class ServerThread extends Thread {
             default:break;
         }
 
+        pras.add(new MediaPrintableArea(0,0,297,210,MediaPrintableArea.MM));
 		//设置打印格式，因为未确定类型，所以选择autosense
         DocFlavor flavor = DocFlavor.INPUT_STREAM.AUTOSENSE;
 
